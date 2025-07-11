@@ -3,40 +3,52 @@ import time
 import requests
 import ctypes
 import threading
+import configparser
+import sys
+import os
+from loguru import logger
+from configparser import ConfigParser
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.keys import Keys
 
-# Твои ссылки
-mynoise_links = [
-    "https://mynoise.net/NoiseMachines/customMedievalLibrary.php",
-    "https://mynoise.net/NoiseMachines/stormSoundGenerator.php",
-    "https://mynoise.net/NoiseMachines/summerNightThunderNoiseGenerator.php",
-    "https://mynoise.net/NoiseMachines/thunderNoiseGenerator.php",
-    "https://mynoise.net/NoiseMachines/customRainOnWindow.php",
-    "https://mynoise.net/NoiseMachines/forestRainOnATentNoiseGenerator.php",
-    "https://mynoise.net/NoiseMachines/campingRainNoiseGenerator.php",
-    "https://mynoise.net/NoiseMachines/tinRoofRainNoiseGenerator.php",
-]
+def init_loguru_logging()->None:
+    # Инициализация хендлера для вывода сообщений в консоль и в файл (логирование)
+    logger.remove()
+    logger.add(
+        sys.stderr,
+        format="|<green> {time: HH:mm:ss} </green>| <level> {level} </level> | {message}",
+        level="DEBUG",
+    )
+    logger.add(
+        os.path.join("result.log"),
+        format="|{time:YYYY.MM.DD HH:mm}|{level}|{message}|",
+        level="DEBUG",
+        rotation="500 kb",
+    )
+def load_main_sect_cfg()->ConfigParser:
+    config = ConfigParser.read()
+    try:
+        config = config["Main"]
 
-youtube_links = ["https://www.youtube.com/live/S_MOd40zlYU?si=LYiPp4eG1nONWz6R"]
-
-all_links = mynoise_links + youtube_links
-
-# Путь к Yandex Browser и chromedriver — укажи свой путь к chromedriver.exe
-YANDEX_BROWSER_PATH = (
-    r"C:\Users\am190\AppData\Local\Yandex\YandexBrowser\Application\browser.exe"
-)
-CHROMEDRIVER_PATH = r"C:\path\to\chromedriver.exe"  # <-- замени на свой реальный путь
-
+    except configparser.NoSectionError:
+        logger.error("Ошибка: Отсутствует секция в конфиге.")
+    return config
+def main()
+    init_loguru_logging()
+    load_main_sect_cfg()
+    noise_links = config["noise_links"]
+    yt_links = config["youtube_links"]
+    BROWSER_PATH = config["browser_path"]
+    CHROMEDRIVER_PATH = config["chromedriver_path"]
 
 # Проверка интернета (пингуем google)
 def internet_on():
     try:
         requests.get("https://www.google.com", timeout=5)
         return True
-    except:
+    except Exception:
         return False
 
 
@@ -58,7 +70,7 @@ def is_english_layout():
 # Запуск браузера с Selenium
 def launch_browser(url):
     options = Options()
-    options.binary_location = YANDEX_BROWSER_PATH
+    options.binary_location = BROWSER_PATH
     # Можно добавить, чтобы не мешал — запускать в режиме окна с минимальным размером и в фоне
     options.add_argument("--window-position=0,0")
     options.add_argument("--window-size=800,600")
