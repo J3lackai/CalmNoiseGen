@@ -1,7 +1,7 @@
 import time
 import random
 import requests
-import ctypes
+import os
 from selenium import webdriver
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -10,6 +10,7 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from loguru import logger
+import pygetwindow as gw
 
 
 def internet_on(timeout=5) -> bool:
@@ -18,15 +19,6 @@ def internet_on(timeout=5) -> bool:
         return True
     except requests.RequestException:
         return False
-
-
-def is_english_layout() -> bool:
-    user32 = ctypes.WinDLL("user32")
-    hwnd = user32.GetForegroundWindow()
-    thread_id = user32.GetWindowThreadProcessId(hwnd, 0)
-    layout_id = user32.GetKeyboardLayout(thread_id)
-    lang_id = layout_id & (2**16 - 1)
-    return lang_id == 0x409  # English layout
 
 
 def parse_config_list(raw_value: str) -> list:
@@ -42,7 +34,9 @@ def launch_browser(
     for arg in args:
         options.add_argument(arg)
 
-    service = Service(chromedriver_path)
+    service = Service(
+        chromedriver_path, log_path=os.devnull
+    )  # Подавляем логи, чтобы не всплывали не нужные сообщения
     driver = webdriver.Chrome(service=service, options=options)
     driver.get(url)
     return driver
@@ -69,6 +63,13 @@ def click_button(driver, id):
 
 
 def turn_on_noise(config):
+    def minimize_browser_window():
+        for w in gw.getWindowsWithTitle("Chromium"):
+            if w.isActive:
+                w.minimize()
+                return True
+        return False
+
     browser_path = config.get("browser_path")
     chromedriver_path = config.get("chromedriver_path")
     noise_timer = int(config.get("noise_timer", 60))
@@ -101,6 +102,7 @@ def turn_on_noise(config):
                 click_button(driver, "mute")
                 if config["slider_animation"]:
                     click_button(driver, "anim")
+                minimize_browser_window()
             else:
                 logger.warning(
                     'Нет необходимых ссылок, добавьте ссылки: "https://mynoise.net...'

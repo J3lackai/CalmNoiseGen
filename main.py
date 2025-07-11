@@ -28,7 +28,6 @@ def load_main_sect_cfg() -> ConfigParser:
     if not os.path.exists("config.ini"):
         logger.critical(
             "Ошибка: Не найден файл 'config.ini', создайте его и добавьте него ваши данные! "
-            + "Иначе скрипт не будет работать! Шаблон для файла-конфига, можно найти тут:"
         )
         raise
     try:
