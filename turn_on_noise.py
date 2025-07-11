@@ -45,17 +45,19 @@ def launch_browser(
     return driver
 
 
-def press_p_key(driver: webdriver.Chrome) -> bool:
-    if not is_english_layout():
-        logger.warning("Раскладка не английская. Пропускаем нажатие 'P'")
-        return False
+def click_play_button(driver: webdriver.Chrome) -> bool:
     try:
-        body = driver.find_element(By.TAG_NAME, "body")
-        body.send_keys("p")
-        logger.info("Клавиша 'P' нажата успешно.")
+        driver.implicitly_wait(60)
+
+        # Проверка, есть ли элемент mute
+        play_button = driver.find_element(By.ID, "mute")
+
+        # Нажимаем
+        play_button.click()
+        logger.info("Клик по кнопке Play (id='mute') выполнен.")
         return True
     except Exception as e:
-        logger.error(f"Ошибка при попытке нажать 'P': {e}")
+        logger.error(f"Не удалось нажать на Play через Selenium: {e}")
         return False
 
 
@@ -86,7 +88,7 @@ def turn_on_noise(config):
             if url in noise_links:
                 logger.debug("Обнаружен источник myNoise, ожидаем загрузку...")
                 time.sleep(10)  # Ждём загрузки
-                press_p_key(driver)
+                click_play_button(driver)
             else:
                 logger.debug("YouTube-радио не требует взаимодействия.")
         except Exception as e:
