@@ -3,6 +3,9 @@ import random
 import requests
 import ctypes
 from selenium import webdriver
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, WebDriverException
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
@@ -45,59 +48,66 @@ def launch_browser(
     return driver
 
 
-def click_play_button(driver: webdriver.Chrome) -> bool:
+def click_button(driver, id):
     try:
-        driver.implicitly_wait(60)
+        # Ждём 100 секунд пока кнопка play не станет кликабельной
 
-        # Проверка, есть ли элемент mute
-        play_button = driver.find_element(By.ID, "mute")
+        wait = WebDriverWait(driver, 100)
+        play_button = wait.until(EC.element_to_be_clickable((By.ID, id)))
 
-        # Нажимаем
         play_button.click()
-        logger.info("Клик по кнопке Play (id='mute') выполнен.")
+        logger.info(f"Клик по кнопке (id={id}) выполнен.")
         return True
-    except Exception as e:
-        logger.error(f"Не удалось нажать на Play через Selenium: {e}")
+
+    except TimeoutException:
+        logger.error("Кнопка 'mute' не стала кликабельной за 60 секунд.")
+        return False
+
+    except WebDriverException as e:
+        logger.error(f"Selenium-ошибка при попытке клика: {e}")
         return False
 
 
 def turn_on_noise(config):
     browser_path = config.get("browser_path")
     chromedriver_path = config.get("chromedriver_path")
-    noise_timer = int(config.get("noise_timer", 60)) * 60
+    noise_timer = int(config.get("noise_timer", 60))
 
-    noise_links = parse_config_list(config.get("noise_links"))
-    youtube_links = parse_config_list(config.get("youtube_links"))
+    noise_links = parse_config_list(config.get("mynoise.net_links"))
     browser_args = parse_config_list(config.get("list_args_browser"))
 
-    all_links = noise_links + youtube_links
+    all_links = noise_links
 
     logger.info("Запуск фонового шумогенератора")
 
+    driver = launch_browser(
+        "about:blank", browser_path, chromedriver_path, browser_args
+    )
     while True:
         if not internet_on():
-            logger.warning("Нет подключения к интернету. Повтор через 60 секунд...")
+            logger.warning("Нет интернета — жду 60 секунд")
             time.sleep(60)
             continue
 
         url = random.choice(all_links)
-        logger.info(f"Открываем: {url}")
+        logger.info(f"Переключаемся на: {url}")
 
         try:
-            driver = launch_browser(url, browser_path, chromedriver_path, browser_args)
+            driver.get(url)
+
             if url in noise_links:
-                logger.debug("Обнаружен источник myNoise, ожидаем загрузку...")
-                time.sleep(10)  # Ждём загрузки
-                click_play_button(driver)
+                logger.debug("Ожидаем кнопку Play...")
+                time.sleep(10)  # Обязательно иначе багует кнопка
+                click_button(driver, "mute")
+                if config["slider_animation"]:
+                    click_button(driver, "anim")
             else:
-                logger.debug("YouTube-радио не требует взаимодействия.")
+                logger.warning(
+                    'Нет необходимых ссылок, добавьте ссылки: "https://mynoise.net...'
+                )
+
         except Exception as e:
-            logger.error(f"Ошибка при запуске браузера или загрузке страницы: {e}")
+            logger.error(f"Ошибка при переходе: {e}")
 
-        logger.info(f"Следующая смена фона через {noise_timer // 60} минут")
-        time.sleep(noise_timer)
-
-        try:
-            driver.quit()
-        except Exception:
-            logger.warning("Не удалось закрыть браузер корректно.")
+        logger.info(f"Следующая смена через {noise_timer} мин")
+        time.sleep(noise_timer * 60)
