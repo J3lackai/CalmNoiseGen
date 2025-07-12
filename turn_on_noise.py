@@ -1,4 +1,4 @@
-import time
+from time import sleep
 import random
 import requests
 import os
@@ -14,6 +14,12 @@ import pygetwindow as gw
 
 
 def internet_on(timeout=5) -> bool:
+    """
+    Проверяет наличие интернет-соединения путём обращения к Google.
+
+    :param timeout: Таймаут запроса в секундах.
+    :return: True, если соединение установлено, иначе False.
+    """
     try:
         requests.get("https://www.google.com", timeout=timeout)
         return True
@@ -22,13 +28,24 @@ def internet_on(timeout=5) -> bool:
 
 
 def parse_config_list(raw_value: str) -> list:
-    # Убираем кавычки и делим по запятой
+    """
+    Преобразует строку из config в список строк, удаляя кавычки и пробелы.
+    """
     return [x.strip().strip('"') for x in raw_value.strip().split(",") if x.strip()]
 
 
 def launch_browser(
     url: str, browser_path: str, chromedriver_path: str, args: list
 ) -> webdriver.Chrome:
+    """
+    Запускает Chrome-браузер с заданными аргументами и открывает нужную ссылку.
+
+    :param url: URL для перехода
+    :param browser_path: Путь до исполняемого файла браузера
+    :param chromedriver_path: Путь до chromedriver.exe
+    :param args: Список аргументов запуска браузера
+    :return: Объект драйвера Selenium
+    """
     options = Options()
     options.binary_location = browser_path
     for arg in args:
@@ -42,7 +59,42 @@ def launch_browser(
     return driver
 
 
-def click_button(driver, id):
+def change_volume_button(driver, val_dif=0) -> None:
+    """
+    Изменяет громкость на mynoise.net нажатием кнопок volUp/volDown.
+
+    :param driver: Экземпляр webdriver
+    :param val_dif: Изменение громкости (отрицательное - тише, положительное - громче)
+    :return: True, если удалось, иначе False
+    """
+    try:
+        wait = WebDriverWait(driver, 30)
+        id = "volDown" if val_dif < 0 else "volUp"
+        label = "тише" if val_dif < 0 else "громче"
+        for _ in range(abs(val_dif) * 2):
+            play_button = wait.until(EC.element_to_be_clickable((By.ID, id)))
+            play_button.click()
+            sleep(0.85)
+        logger.info(f"Сделали {label} на {abs(val_dif)} от средней громкости.")
+        return True
+
+    except TimeoutException:
+        logger.error(f"Кнопка (id={id}) не стала кликабельной за 60 секунд.")
+        return False
+
+    except WebDriverException as e:
+        logger.error(f"Selenium-ошибка при попытке клика: {e}")
+        return False
+
+
+def click_button(driver, id) -> None:
+    """
+    Пытается нажать на кнопку по ID, ожидая её появления до 100 секунд.
+
+    :param driver: Экземпляр webdriver
+    :param id: HTML id кнопки
+    :return: True, если успешно, иначе False
+    """
     try:
         # Ждём 100 секунд пока кнопка play не станет кликабельной
 
@@ -54,7 +106,7 @@ def click_button(driver, id):
         return True
 
     except TimeoutException:
-        logger.error("Кнопка 'mute' не стала кликабельной за 60 секунд.")
+        logger.error(f"Кнопка (id={id}) не стала кликабельной за 60 секунд.")
         return False
 
     except WebDriverException as e:
@@ -62,8 +114,18 @@ def click_button(driver, id):
         return False
 
 
-def turn_on_noise(config):
-    def minimize_browser_window():
+def turn_on_noise(config) -> None:
+    """
+    Основная функция: запускает браузер и периодически переключает фоновые шумы.
+    Работает бесконечно, проверяя интернет, выбирая ссылку и настраивая шум.
+
+    :param config: Объект конфигурации из configparser
+    """
+
+    def minimize_browser_window() -> None:
+        """
+        Функция сворачивает окно браузера
+        """
         for w in gw.getWindowsWithTitle("Chromium"):
             if w.isActive:
                 w.minimize()
@@ -73,7 +135,11 @@ def turn_on_noise(config):
     browser_path = config.get("browser_path")
     chromedriver_path = config.get("chromedriver_path")
     noise_timer = int(config.get("noise_timer", 60))
-
+    volume = int(config["volume"])
+    if not (0 <= volume <= 10):
+        logger.error("Ошибка: value может принимать значения только от 0 до 10")
+        logger.info("Взято значение по-умолчанию 5")
+        volume = 5
     noise_links = parse_config_list(config.get("mynoise.net_links"))
     browser_args = parse_config_list(config.get("list_args_browser"))
 
@@ -87,7 +153,7 @@ def turn_on_noise(config):
     while True:
         if not internet_on():
             logger.warning("Нет интернета — жду 60 секунд")
-            time.sleep(60)
+            sleep(60)
             continue
 
         url = random.choice(all_links)
@@ -98,10 +164,16 @@ def turn_on_noise(config):
 
             if url in noise_links:
                 logger.debug("Ожидаем кнопку Play...")
-                time.sleep(10)  # Обязательно иначе багует кнопка
+                sleep(10)  # Обязательно иначе багует кнопка
                 click_button(driver, "mute")
-                if config["slider_animation"]:
+                if config.getboolean("slider_animation", fallback=True):
                     click_button(driver, "anim")
+                if volume != 5:
+                    if volume < 5:
+                        val_dif = -(5 - volume % 5)
+                    else:
+                        val_dif = ((volume // 5 - 1) * 5) + volume % 5
+                    change_volume_button(driver, val_dif)
                 minimize_browser_window()
             else:
                 logger.warning(
@@ -112,4 +184,4 @@ def turn_on_noise(config):
             logger.error(f"Ошибка при переходе: {e}")
 
         logger.info(f"Следующая смена через {noise_timer} мин")
-        time.sleep(noise_timer * 60)
+        sleep(noise_timer * 60)
